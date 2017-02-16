@@ -24,7 +24,13 @@
 	<script th:src="@{/elements/filterElement/filterElement.js}"></script>
 	<link rel="stylesheet" type="text/css" th:href="@{/elements/filterElement/filterElement.css}"/>
 	
-	<title>CollectiveOne - Goal</title>
+	
+	<title th:text="'CollectiveOne | ' + ${projectName} + ' +' + ${goalTag}">CollectiveOne - Goal</title>
+	<meta property="og:title" th:content="'CollectiveOne | ' + ${projectName} + '+' + ${goalTag}" />
+	<meta property="og:description" th:content="${goalDescription}" />
+	<meta property="og:type" content="website" />
+	<meta property="og:url" th:content="'http://www.collectiveone.org/views/goalPageR/'+${goalId}" />
+	<meta property="og:image" content="http://www.collectiveone.org/images/Logo.png" />
 	
 	<script th:inline="javascript">
 	/*<![CDATA[*/
@@ -37,14 +43,18 @@
 <body>
 	<div layout:fragment="content_pane">
 		<br />
+		<div class="alert alert-info">
+		  <strong>Tip</strong><br />
+		  This is a dedicated page for this goal. 
+		</div>
 		<div id="goal_container"></div>
-		<div id="goal_weights_div" class="cp_box_gray_thick">
-			<label id="weights_label" class="label label-default">participation</label>
+		<div id="goal_weights_div" class="panel panel-info">
+			<div class="panel-heading"><b>Participation</b></div>
 			<div id="goal_weights_container">
 			</div>
 		</div>
-		<div id="cbtions_div" class="cp_box_gray_thick">
-			<label id="cbtions_label" class="label label-default">contributions</label>
+		<div id="cbtions_div" class="panel panel-info">
+			<div class="panel-heading"><b>Contributions</b></div>
 			<div id="cbtions_container">
 			</div>
 		</div>

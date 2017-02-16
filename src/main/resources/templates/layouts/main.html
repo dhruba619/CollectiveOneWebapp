@@ -35,7 +35,7 @@
 		GLOBAL.sessionData = {};
 		
 		/* prepare session data */
-		GLOBAL.sessionData.userLogged = /*[[${#authentication.name}]]*/;
+		GLOBAL.sessionData.userLogged = /*[[${#authentication} != null? ${#authentication.name}]]*/;
 		
 	/*]]>*/
 	</script>
@@ -58,17 +58,12 @@
 				
 				<div class="collapse navbar-collapse" id="myNavbar">
 					<ul class="nav navbar-nav">
-						<li class="dropdown"><a class="dropdown-toggle"
-							data-toggle="dropdown" href="#">projects <span class="caret"></span></a>
-							<ul class="dropdown-menu">
-								<li><a th:href="@{/views/projectPageR/CollectiveOne}">CollectiveOne</a></li>
-								<li><a th:href="@{/views/projectPageR/CollectiveSunrise}">CollectiveSunrise</a></li>
-							</ul>
-						</li>
-						<li><a th:href="@{/views/cbtionListPageR}" data-toggle="tooltip" title="browse all contribution items">contributions</a></li>
-						<li><a th:href="@{/views/decisionListPageR}" data-toggle="tooltip" title="browse all decision items">decisions</a></li>
-						<li><a th:href="@{/views/activityListPageR}">recent activity</a></li>
-						<li class="dropdown"><a class="dropdown-toggle"
+						<li id="projects-nav-btn"><a th:href="@{/views/projectListPageR}" data-toggle="tooltip" title="browse all projects">projects</a></li>
+						<li id="cbtions-nav-btn"><a th:href="@{/views/cbtionListPageR}" data-toggle="tooltip" title="browse all contribution items">contributions</a></li>
+						<li id="decisions-nav-btn"><a th:href="@{/views/decisionListPageR}" data-toggle="tooltip" title="browse all decision items">decisions</a></li>
+						<li id="recact-nav-btn"><a th:href="@{/views/activityListPageR}">recent activity</a></li>
+						<li id="help-nav-btn"><a th:href="@{/views/helpPageR}">help</a></li>
+						<li id="new-nav-btn" class="dropdown"><a class="dropdown-toggle"
 							data-toggle="dropdown" href="#">new <span class="caret"></span></a>
 							<ul class="dropdown-menu">
 								<li><a th:href="@{/views/cbtionNewPageR}">Contribution</a></li>
@@ -80,7 +75,7 @@
 					</ul>
 					<div class="navbar-text navbar-right cp_navbar-right">
 						<div sec:authorize="isAuthenticated()">
-							Welcome <span sec:authentication="name">Guest</span> |
+							Welcome <a th:href="'/views/userPageR/'+${#authentication.getName()}" th:text="${#authentication.getName()}">Guest</a> |
 							<form sec:authorize="isAuthenticated()" id="frmlogout"
 								th:action="@{/logout}" method="post" class="form-inline">
 								<a href="javascript:{}"
@@ -111,20 +106,20 @@
 		</div>
 		<div layout:fragment="content_pane" id="content_pane"></div>
 
-		<div id="bottom">
-			<div id="license_div">
-				<div id="license_img">
-					<a rel="license" href="http://creativecommons.org/licenses/by-nc-nd/3.0/" target='_blank'>
-						<img alt="Creative Commons License" style="border-width:0" src="https://i.creativecommons.org/l/by-nc-nd/3.0/88x31.png" />
-					</a> <br />
-				</div>
-				<div id="license_text">
-					This work is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by-nc-nd/3.0/" target='_blank'>Creative Commons Attribution-NonCommercial-NoDerivs 3.0 Unported License</a>.
-				</div>
-			</div>
+		<div class="footer">
 			<div id="contact_footnote">
-				<a href="mailto:contact@collectiveone.org">contact@collectiveone.org</a>
-				<a href="https://twitter.com/collectiveonepr">@collectiveonepr</a>
+				<a id="link_to_slack_container"
+						th:href="@{/views/slackPageR}"> <img
+						id="logo" src="/images/slack-512.png"></img>
+				</a>
+				<a id="link_to_email_container"
+					href="mailto:contact@collectiveone.org">
+					<img id="logo" src="/images/iconmonstr-email-4-icon-27.png"></img>
+				</a>
+				<a id="link_to_twitter_container"
+					href="https://twitter.com/collectiveonepr" target='_blank'>
+					<img id="logo" src="/images/43-twitter-512.png"></img>
+				</a>
 			</div>
 		</div>
 

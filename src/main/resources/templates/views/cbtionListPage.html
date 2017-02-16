@@ -15,11 +15,18 @@
 	<link rel="stylesheet" type="text/css" th:href="@{/elements/filterElement/filterElement.css}"/>
 	
 	<title>CollectiveOne - Search Contributions</title>
+	<meta property="og:title" content="CollectiveOne - Search Contributions" />
+	<meta property="og:description" content="Search for contribution items in CollectiveOne" />
+	<meta property="og:type" content="website" />
+	<meta property="og:url" content="http://www.collectiveone.org/views/cbtionListPageR" />
+	<meta property="og:image" content="http://www.collectiveone.org/images/Logo.png" />
 	
 	<script th:inline="javascript">
 	/*<![CDATA[*/
 		$(document).ready(function() {
-			var cbtionList = new CbtionList("#content_pane",
+			$("#cbtions-nav-btn").addClass("active");
+			
+			var cbtionList = new CbtionList("#cbtionlist",
 				{
 					showFilterBtn: true,
 					showNewBtn: true,
@@ -33,6 +40,11 @@
 </head>
 <body>
 	<div layout:fragment="content_pane">
+		<div class="alert alert-info">
+		  <strong>Tip</strong><br />
+		  Here you can browse all contributions of all projects. If one or more projects are selected from the "show only" list, above, only elements from these will be shown by default.
+		</div>
+		<div id="cbtionlist"></div>
 	</div>
 </body>
 </html>

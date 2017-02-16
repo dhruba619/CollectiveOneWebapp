@@ -13,6 +13,7 @@ import org.collectiveone.model.Activity;
 import org.collectiveone.model.ActivityType;
 import org.collectiveone.model.Argument;
 import org.collectiveone.model.ArgumentTendency;
+import org.collectiveone.model.AuthorizedEmail;
 import org.collectiveone.model.AuthorizedProject;
 import org.collectiveone.model.Bid;
 import org.collectiveone.model.BidDoneState;
@@ -38,6 +39,7 @@ import org.collectiveone.model.User;
 import org.collectiveone.model.Voter;
 import org.collectiveone.repositories.ActivityDao;
 import org.collectiveone.repositories.ArgumentDao;
+import org.collectiveone.repositories.AuthorizedEmailRepository;
 import org.collectiveone.repositories.AuthorizedProjectDao;
 import org.collectiveone.repositories.BidDao;
 import org.collectiveone.repositories.CbtionRepository;
@@ -136,6 +138,9 @@ public class DbServicesImp {
 	protected CommentDao commentDao;
 	
 	@Autowired
+	protected AuthorizedEmailRepository authorizedEmailRepository;
+	
+	@Autowired
 	protected AuthorizedProjectDao authorizedProjectDao;
 	
 	@Autowired
@@ -197,7 +202,39 @@ public class DbServicesImp {
 	public List<User> userGetAll(Integer max) {
 		return userDao.getAll(max);
 	}
+	
+	@Transactional
+	public void userUpdateProfile(UserDto userDto) {
+		User user = userDao.get(userDto.getUsername());
+		user.setProfile(userDto.getProfile());
+		userDao.save(user);
+	}
+	
+	@Transactional
+	public void authorizedEmailAdd(String email, Long referralId, String token) {
+		AuthorizedEmail authorizedEmail = new AuthorizedEmail();
+		
+		authorizedEmail.setEmail(email);
+		authorizedEmail.setReferral(referralId);
+		authorizedEmail.setToken(token);
+		authorizedEmail.setDateRequested(new Timestamp(System.currentTimeMillis()));
+		authorizedEmail.setAuthorized(false);
+		
+		authorizedEmailRepository.save(authorizedEmail);
+	}
 
+	@Transactional
+	public boolean authorizedEmailValidate(String email, String token) {
+		AuthorizedEmail authorizedEmail = authorizedEmailRepository.findByEmailAndToken(email, token);
+		if(authorizedEmail != null) {
+			authorizedEmail.setAuthorized(true);
+			authorizedEmailRepository.save(authorizedEmail);
+			return true;
+		} else {
+			return false;
+		}
+	}
+	
 	@Transactional
 	public void contributorUpdate(Long projectId, Long userId, double lastOne) {
 		/* update the contributor pps in project recalculating all accepted
@@ -289,6 +326,11 @@ public class DbServicesImp {
 	public List<String> usernameGetSuggestions(String query) {
 		return userDao.getSuggestions(query);
 	}
+	
+	@Transactional
+	public List<String> usernameGetSuggestionsReferrer(String query) {
+		return userDao.getSuggestionsReferrer(query);
+	}
 
 	@Transactional
 	public void projectSave(Project project) {
@@ -327,6 +369,7 @@ public class DbServicesImp {
 			project.setCreator(creator);
 			project.setCreationDate(new Timestamp(System.currentTimeMillis()));
 			project.setDescription(projectDto.getDescription());
+			project.setPpsTot(0.0);
 		}
 	}
 	
@@ -345,7 +388,7 @@ public class DbServicesImp {
 	}
 
 	@Transactional
-	public void projectStart(String projectName, double ppsInit) {
+	public void projectStart(String projectName, List<UsernameAndPps> usernamesAndPps) {
 
 		User coprojects = userDao.get("collectiveone");
 		userDao.save(coprojects);
@@ -366,77 +409,80 @@ public class DbServicesImp {
 		DecisionRealm realm = decisionRealmDao.getFromGoalId(goal.getId());
 		decisionRealmDao.save(realm);
 
-		/* An accepted cbtion is added to the project to the contributor */
-		Cbtion cbtion = new Cbtion();
+		/* An accepted cbtion is added to the project for each contributor */
+		for(UsernameAndPps usernameAndPps : usernamesAndPps) {
+			User ctrb = userDao.get(usernameAndPps.getUsername());
+			
+			Cbtion cbtion = new Cbtion();
 
-		cbtion.setCreator(creator);
+			cbtion.setCreator(creator);
+			cbtion.setCreationDate(new Timestamp(System.currentTimeMillis()));
+			cbtion.setTitle("Create project " + project.getName());
+			cbtion.setDescription("Start contribution");
+			cbtion.setProject(project);
 
-		cbtion.setCreationDate(new Timestamp(System.currentTimeMillis()));
-		cbtion.setTitle("Create project " + project.getName());
-		cbtion.setDescription("Start contribution");
-		cbtion.setProject(project);
+			cbtionDao.save(cbtion);
 
-		cbtionDao.save(cbtion);
+			/* Bids and decisions are created for consistency */
+			Bid bid = new Bid();
+			bidDao.save(bid);
 
-		/* Bids and decisions are created for consistency */
-		Bid bid = new Bid();
-		bidDao.save(bid);
+			bid.setCbtion(cbtion);
+			cbtion.getBids().add(bid);
 
-		bid.setCbtion(cbtion);
-		cbtion.getBids().add(bid);
+			bid.setCreator(ctrb);
+			bid.setCreationDate(new Timestamp(System.currentTimeMillis()));
+			bid.setPpoints(usernameAndPps.getPps());
+			bid.setDescription("Create project "+ project.getName());
+			bid.setState(BidState.OFFERED);
 
-		bid.setCreator(creator);
-		bid.setCreationDate(new Timestamp(System.currentTimeMillis()));
-		bid.setPpoints(ppsInit);
-		bid.setDescription("Create project "+ project.getName());
-		bid.setState(BidState.OFFERED);
+			Decision assign_bid = new Decision();
+			decisionDao.save(assign_bid);
 
-		Decision assign_bid = new Decision();
-		decisionDao.save(assign_bid);
+			Decision accept_bid = new Decision();
+			decisionDao.save(accept_bid);
 
-		Decision accept_bid = new Decision();
-		decisionDao.save(accept_bid);
+			bid.setAssign(assign_bid);
+			bid.setAccept(accept_bid);
 
-		bid.setAssign(assign_bid);
-		bid.setAccept(accept_bid);
+			assign_bid.setCreator(coprojects);
+			assign_bid.setCreationDate(new Timestamp(System.currentTimeMillis()));
+			assign_bid.setDescription("assign bid to cbtion:"+bid.getCbtion().getTitle()+" by:"+bid.getCreator().getUsername());
+			assign_bid.setVerdict(1);
+			assign_bid.setState(DecisionState.CLOSED_ACCEPTED);
+			assign_bid.setDecisionRealm(realm);
+			assign_bid.setFromState(BidState.OFFERED.toString());
+			assign_bid.setToState(BidState.ASSIGNED.toString());
+			assign_bid.setProject(project);
+			assign_bid.setGoal(goal);
+			assign_bid.setType(DecisionType.BID);
+			assign_bid.setAffectedBid(bid);
 
-		assign_bid.setCreator(coprojects);
-		assign_bid.setCreationDate(new Timestamp(System.currentTimeMillis()));
-		assign_bid.setDescription("assign bid to cbtion:"+bid.getCbtion().getTitle()+" by:"+bid.getCreator().getUsername());
-		assign_bid.setVerdict(1);
-		assign_bid.setState(DecisionState.CLOSED_ACCEPTED);
-		assign_bid.setDecisionRealm(realm);
-		assign_bid.setFromState(BidState.OFFERED.toString());
-		assign_bid.setToState(BidState.ASSIGNED.toString());
-		assign_bid.setProject(project);
-		assign_bid.setGoal(goal);
-		assign_bid.setType(DecisionType.BID);
-		assign_bid.setAffectedBid(bid);
+			accept_bid.setCreator(coprojects);
+			accept_bid.setCreationDate(new Timestamp(System.currentTimeMillis()));
+			accept_bid.setDescription("accept bid to cbtion:"+bid.getCbtion().getTitle()+" by:"+bid.getCreator().getUsername());
+			accept_bid.setVerdict(1);
+			accept_bid.setState(DecisionState.CLOSED_ACCEPTED);
+			accept_bid.setDecisionRealm(realm);
+			accept_bid.setFromState(BidState.ASSIGNED.toString());
+			accept_bid.setToState(BidState.ACCEPTED.toString());
+			accept_bid.setProject(project);
+			accept_bid.setGoal(goal);
+			accept_bid.setType(DecisionType.BID);
+			accept_bid.setAffectedBid(bid);
 
-		accept_bid.setCreator(coprojects);
-		accept_bid.setCreationDate(new Timestamp(System.currentTimeMillis()));
-		accept_bid.setDescription("accept bid to cbtion:"+bid.getCbtion().getTitle()+" by:"+bid.getCreator().getUsername());
-		accept_bid.setVerdict(1);
-		accept_bid.setState(DecisionState.CLOSED_ACCEPTED);
-		accept_bid.setDecisionRealm(realm);
-		accept_bid.setFromState(BidState.ASSIGNED.toString());
-		accept_bid.setToState(BidState.ACCEPTED.toString());
-		accept_bid.setProject(project);
-		accept_bid.setGoal(goal);
-		accept_bid.setType(DecisionType.BID);
-		accept_bid.setAffectedBid(bid);
+			/* simulate the bid acceptance process */
+			bid.setState(BidState.ACCEPTED);
 
-		/* simulate the bid acceptance process */
-		bid.setState(BidState.ACCEPTED);
+			project.setPpsTot(project.getPpsTot() + bid.getPpoints());
 
-		project.setPpsTot(bid.getPpoints());
+			cbtion.setAssignedPpoints(bid.getPpoints());
+			cbtion.setContributor(bid.getCreator());
+			cbtion.setState(CbtionState.ACCEPTED);
 
-		cbtion.setAssignedPpoints(bid.getPpoints());
-		cbtion.setContributor(bid.getCreator());
-		cbtion.setState(CbtionState.ACCEPTED);
-
-		/* add user to project contributors */
-		contributorDao.updateContributor(project.getId(), creator.getId(), bid.getPpoints());
+			/* add user to project contributors */
+			contributorDao.updateContributor(project.getId(), ctrb.getId(), bid.getPpoints());
+		}
 	}
 
 	@Transactional
@@ -472,10 +518,7 @@ public class DbServicesImp {
 		List<UsernameAndPps> usernamesAndPps = new ArrayList<UsernameAndPps>();
 
 		for(Contributor contributor : getProjectContributors(projectId)) {
-			UsernameAndPps usernameAndPps = new UsernameAndPps();
-			usernameAndPps.setUsername(contributor.getContributorUser().getUsername());
-			usernameAndPps.setPps(contributor.getPps());
-			
+			UsernameAndPps usernameAndPps = new UsernameAndPps(contributor.getContributorUser().getUsername(),contributor.getPps());
 			usernamesAndPps.add(usernameAndPps);
 		}
 
@@ -505,6 +548,22 @@ public class DbServicesImp {
 	public Set<Contributor> getProjectContributors(Long projectId) {
 		return projectDao.getContributors(projectId);
 	}
+	
+	@Transactional
+	public ProjectDtoListRes projectDtoGetFiltered(Filters filters) {
+		ObjectListRes<Project> projectsRes = projectDao.get(filters);
+
+		ProjectDtoListRes projectsDtosRes = new ProjectDtoListRes();
+
+		projectsDtosRes.setResSet(projectsRes.getResSet());
+		projectsDtosRes.setProjectDtos(new ArrayList<ProjectDto>());
+
+		for(Project project : projectsRes.getObjects()) {
+			projectsDtosRes.getProjectDtos().add(project.toDto());
+		}
+
+		return projectsDtosRes;
+	}	
 
 	@Transactional
 	public Long goalCreate(GoalDto goalDto, GoalState state) throws IOException {
@@ -1128,12 +1187,10 @@ public class DbServicesImp {
 				
 				reattach.setCreator(userDao.get("collectiveone"));
 				reattach.setCreationDate(new Timestamp(System.currentTimeMillis()));
-				reattach.setDescription("reattach goal +"+goal.getGoalTag()+" to "+goal.getParent());
+				reattach.setDescription("reattach goal +"+goal.getGoalTag()+" to "+goal.getParent().getGoalTag());
 				reattach.setState(DecisionState.IDLE);
 				reattach.setVerdictHours(36);
 				reattach.setDecisionRealm(decisionRealmDao.getFromGoalId(goal.getId()));
-				reattach.setFromState(GoalState.PROPOSED.toString());
-				reattach.setToState(GoalState.ACCEPTED.toString());
 				reattach.setProject(goal.getProject());
 				reattach.setGoal(goal);
 				reattach.setType(DecisionType.GOAL);

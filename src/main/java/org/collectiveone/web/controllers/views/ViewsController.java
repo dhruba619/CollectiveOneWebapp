@@ -1,11 +1,16 @@
 package org.collectiveone.web.controllers.views;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Locale;
+import java.util.UUID;
 
+import javax.servlet.http.HttpServletRequest;
 import javax.validation.Valid;
 import javax.websocket.server.PathParam;
 
 import org.collectiveone.model.GoalState;
+import org.collectiveone.model.User;
 import org.collectiveone.services.AppMailServiceHeroku;
 import org.collectiveone.services.DbServicesImp;
 import org.collectiveone.web.dto.CbtionDto;
@@ -13,8 +18,10 @@ import org.collectiveone.web.dto.DecisionDtoCreate;
 import org.collectiveone.web.dto.DecisionDtoFull;
 import org.collectiveone.web.dto.GoalDto;
 import org.collectiveone.web.dto.InvRequest;
+import org.collectiveone.web.dto.ProjectDto;
 import org.collectiveone.web.dto.ProjectNewDto;
 import org.collectiveone.web.dto.SignupRequest;
+import org.collectiveone.web.dto.UsernameAndPps;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.env.Environment;
 import org.springframework.security.access.annotation.Secured;
@@ -76,14 +83,31 @@ public class ViewsController {
 		
 		model.addAttribute("cbtionTitle",ctionDto.getTitle());
 		model.addAttribute("cbtionId",ctionDto.getId());
+		model.addAttribute("cbtionDescription",ctionDto.getDescription());
 		
 		return "views/cbtionPage";
 	}
 	
+	@RequestMapping("/goalPageR/{goalId}")
+	public String goalPageId(@PathVariable("goalId") Long goalId, Model model) {
+		GoalDto goalDto = dbServices.goalGetDto(goalId);  
+		
+		model.addAttribute("goalTag",goalDto.getGoalTag());
+		model.addAttribute("projectName",goalDto.getProjectName());
+		model.addAttribute("goalId",goalDto.getId());
+		model.addAttribute("goalDescription",goalDto.getDescription());
+		
+		return "views/goalPage";
+	}
+	
 	@RequestMapping("/goalPageR")
 	public String goalPage(@PathParam("goalTag") String goalTag, @PathParam("projectName") String projectName, Model model) {
-		model.addAttribute("goalTag",goalTag);
-		model.addAttribute("projectName",projectName);
+		GoalDto goalDto = dbServices.goalGetDto(goalTag,projectName);  
+		
+		model.addAttribute("goalTag",goalDto.getGoalTag());
+		model.addAttribute("projectName",goalDto.getProjectName());
+		model.addAttribute("goalId",goalDto.getId());
+		model.addAttribute("goalDescription",goalDto.getDescription());
 		
 		return "views/goalPage";
 	}
@@ -92,6 +116,11 @@ public class ViewsController {
 	public String slackPage(Model model) {
 		model.addAttribute("invRequest",new InvRequest());
 		return "views/slackPage";
+	}
+	
+	@RequestMapping("/helpPageR")
+	public String helpPage(Model model) {
+		return "views/helpPage";
 	}
 	
 	@RequestMapping("/slackInvSubmit")
@@ -119,24 +148,75 @@ public class ViewsController {
 	}
 	
 	@RequestMapping("/signupRequestSubmit")
-	public String signupRequestSubmit(@Valid SignupRequest signupRequest, Model model) throws IOException {
+	public String signupRequestSubmit(@Valid SignupRequest signupRequest, Model model, final HttpServletRequest request) throws IOException {
 		
-        String subject = "Signup invitation request";
-        String body = "Request to signup sent by "+signupRequest.getEmail()+"\rComments:\r"+signupRequest.getComments();
-        
-        mailService.sendMail(
-        		env.getProperty("collectiveone.webapp.admin-email"),
-        		subject, 
-        		body);
-        
-        model.addAttribute("message","Thanks, your request has been received "+signupRequest.getEmail()+". We will process it as soon as possible and come back to you.");
-        
-        return "views/signUpRequestPage";
+		User referral = dbServices.userGet(signupRequest.getReferral());
+		
+		if(referral != null) {
+			if(referral.getIsReferrer() != null) {			
+				if(referral.getIsReferrer()) {
+					String token = UUID.randomUUID().toString();
+					
+					dbServices.authorizedEmailAdd(signupRequest.getEmail(), referral.getId(), token);
+					
+					String authUrl = getAppUrl(request)+"/views/authorizeSignup?email="+signupRequest.getEmail()+"&token="+token;
+					
+					String subject = "Signup invitation request";
+			        String body = "Request to signup sent by "+signupRequest.getEmail()+"."
+			        				+"\n\nCollectiveOne wants to keep one real person behind each user."
+			        				+ "\n\nIf you know this is the case for this request, please authorize it by visiting this link:"
+			        				+ authUrl
+			        				+"\n\nComments:"+signupRequest.getComments();
+			        
+			        mailService.sendMail(
+			        		referral.getEmail(),
+			        		subject, 
+			        		body);
+			        
+			        model.addAttribute("message","Thanks, your request has been received "+signupRequest.getEmail()+"."+
+			        		" An email has been sent to '"+referral.getUsername()+"' with a link to authorize your signup.");
+			        return "views/signUpRequestPage";
+				} else {
+					model.addAttribute("message","Referral not found");
+					return "views/signUpRequestPage";
+				}
+			} else {
+				model.addAttribute("message","Referral not found");
+				return "views/signUpRequestPage";
+			}
+		} else {
+			model.addAttribute("message","Referral not found");
+	        return "views/signUpRequestPage";
+		}
 	}
+	
+	@RequestMapping("/authorizeSignup")
+    public String passwordRecovery(final Locale locale, final Model model, @RequestParam("email") String email, @RequestParam("token") String token, final HttpServletRequest request) throws IOException {
+        if(dbServices.authorizedEmailValidate(email, token)) {
+        	
+        	String subject = "Signup request accepted";
+	        String body = "Request to signup accepted to "+email+"."
+	        				+"\n\nYou can now signup by visiting:"+getAppUrl(request)+"/user/signup";
+	        
+	        mailService.sendMail(
+	        		email,
+	        		subject, 
+	        		body);
+        	
+        	model.addAttribute("message","Email '"+email+"' has been authorized");	
+        } else {
+        	model.addAttribute("message","There was a problem authorizing'"+email+"'");
+        }
+        return "auth/login";
+    }
 	
 	@RequestMapping("/projectPageR/{projectName}")
 	public String projectPageR(@PathVariable("projectName") String projectName, Model model) {
+		ProjectDto projectDto = dbServices.projectGetDto(projectName);
+		
 		model.addAttribute("projectName",projectName);
+		model.addAttribute("projectDescription",projectDto.getDescription());
+		
 		return "views/projectPage";
 	}
 	
@@ -144,12 +224,19 @@ public class ViewsController {
 	public String decisionPage(@PathVariable(value="id") Long id, Model model) {
 		DecisionDtoFull decision = dbServices.decisionGetDto(id);  
 		model.addAttribute("decisionId",decision.getId());
+		model.addAttribute("decisionDescription",decision.getDescription());
+		
 		return "views/decisionPage";
 	}
 	
 	@RequestMapping("/decisionListPageR")
 	public String decisionListPage(Model model) {
 		return "views/decisionListPage";
+	}
+	
+	@RequestMapping("/projectListPageR")
+	public String projectListPage(Model model) {
+		return "views/projectListPage";
 	}
 	
 	@Secured("ROLE_USER")
@@ -261,10 +348,32 @@ public class ViewsController {
 	@Secured("ROLE_USER")
 	@RequestMapping("/projectNewPageR")
 	public String projectNewPage(Model model) {
-		ProjectNewDto project = new ProjectNewDto();
-		/* use 100 pps as default, minimum was set to 10 in validation*/
-		project.setPpsInitial(100.0);
-		model.addAttribute("project",project);
+		if(!model.containsAttribute("project")) {
+			ProjectNewDto project = new ProjectNewDto();
+			project.setUsernamesAndPps(new ArrayList<UsernameAndPps>());
+			
+			/* by default project creator is assigned 100 pps */
+			Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+			project.getUsernamesAndPps().add(new UsernameAndPps(auth.getName(),100.0));
+			model.addAttribute("project",project);
+		}
+	
+		return "views/projectNewPage";
+	}
+	
+	@Secured("ROLE_USER")
+	@RequestMapping(value="/projectNewSubmit", params = {"addContributor"})
+	public String projectNewPageAddContributor(@ModelAttribute("project") ProjectNewDto projectDto, Model model) {
+		projectDto.getUsernamesAndPps().add(new UsernameAndPps("",100));
+		model.addAttribute("project",projectDto);
+		return "views/projectNewPage";
+	}
+	
+	@Secured("ROLE_USER")
+	@RequestMapping(value="/projectNewSubmit", params = {"removeContributor"})
+	public String projectNewPageRmContributor(@ModelAttribute("project") ProjectNewDto projectDto, Model model) {
+		projectDto.getUsernamesAndPps().remove(projectDto.getUsernamesAndPps().size()-1);
+		model.addAttribute("project",projectDto);
 		return "views/projectNewPage";
 	}
 	
@@ -282,7 +391,7 @@ public class ViewsController {
 					
 					dbServices.projectCreate(projectDto);
 					dbServices.projectCreateFirstGoal(projectDto);
-					dbServices.projectStart(projectDto.getName(),projectDto.getPpsInitial());
+					dbServices.projectStart(projectDto.getName(),projectDto.getUsernamesAndPps());
 					dbServices.decisionRealmInitAllSupergoalsToProject(dbServices.projectGet(projectDto.getName()).getId());
 					
 					return "redirect:/views/projectPageR/"+projectDto.getName();	
@@ -296,4 +405,10 @@ public class ViewsController {
 			}
 		}
 	}
+	
+	/* support */
+	private String getAppUrl(HttpServletRequest request) {
+        return "http://" + request.getServerName() + ":" + request.getServerPort() + request.getContextPath();
+    }
+	
 }

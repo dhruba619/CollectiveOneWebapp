@@ -1,27 +1,30 @@
 package org.collectiveone.web.dto;
 
-import javax.validation.constraints.Min;
+import java.util.List;
+
 import javax.validation.constraints.Pattern;
 
 import org.hibernate.validator.constraints.NotEmpty;
 
 public class ProjectNewDto {
 	@NotEmpty
-	@Pattern(regexp="^((?!\\s).)*$", message="may not contain white spaces")
+	@Pattern(regexp="^[0-9a-zA-z-]+$", message="only letters, numbers or bars '-'")
 	private String name;
 	@NotEmpty
 	private String description;
 	
 	@NotEmpty
-	@Pattern(regexp="^((?!\\s).)*$", message="may not contain white spaces")
+	@Pattern(regexp="^[0-9a-zA-z-]+$", message="only letters, numbers or bars '-'")
 	private String goalTag;
 	@NotEmpty
 	private String goalDescription;
 	
 	private String creatorUsername;
 	
-	@Min(10)
-	private double ppsInitial;
+	private List<UsernameAndPps> usernamesAndPps;
+	
+	public ProjectNewDto(){
+	}
 	
 	public String getName() {
 		return name;
@@ -53,10 +56,11 @@ public class ProjectNewDto {
 	public void setGoalDescription(String goalDescription) {
 		this.goalDescription = goalDescription;
 	}
-	public double getPpsInitial() {
-		return ppsInitial;
+	public List<UsernameAndPps> getUsernamesAndPps() {
+		return usernamesAndPps;
 	}
-	public void setPpsInitial(double ppsInitial) {
-		this.ppsInitial = ppsInitial;
+	public void setUsernamesAndPps(List<UsernameAndPps> usernamesAndPps) {
+		this.usernamesAndPps = usernamesAndPps;
 	}
+	
 }
